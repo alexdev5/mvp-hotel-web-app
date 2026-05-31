@@ -213,6 +213,8 @@ const inProgressTitle = computed(() => {
         return 'Завантаження...'
     } else if (removing.value) {
         return 'Видалення...'
+    } else if (submitting.value) {
+        return 'Збереження...'
     }
     return ''
 })
