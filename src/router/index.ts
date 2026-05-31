@@ -3,11 +3,12 @@ import { useHead } from '@vueuse/head'
 
 export enum RouteName {
     Home = 'home',
-    Work_1 = 'work-1',
-    Work_2 = 'work-2',
-    Work_3 = 'work-3',
-    Work_4 = 'work-4',
-    Work_5 = 'work-5',
+    Rooms = 'rooms',
+    Guests = 'guests',
+    Bookings = 'bookings',
+    Services = 'services',
+    Calculation = 'calculation',
+    DataView = 'data-view',
     PageNotFound = 'page-not-found',
 }
 
@@ -15,14 +16,44 @@ const routes: Array<RouteRecordRaw> = [
     {
         path: '/',
         name: RouteName.Home,
-        meta: { title: 'Home' },
+        meta: { title: 'Готель — Головна' },
         component: () => import('@/views/home/home.view.vue'),
     },
     {
-        path: '/work-3',
-        name: RouteName.Work_3,
-        meta: { title: 'Практикум 3' },
-        component: () => import('@/views/work-3/work-3.view.vue'),
+        path: '/rooms',
+        name: RouteName.Rooms,
+        meta: { title: 'Управління номерами' },
+        component: () => import('@/views/rooms/rooms.view.vue'),
+    },
+    {
+        path: '/guests',
+        name: RouteName.Guests,
+        meta: { title: 'Реєстрація відвідувачів' },
+        component: () => import('@/views/guests/guests.view.vue'),
+    },
+    {
+        path: '/bookings',
+        name: RouteName.Bookings,
+        meta: { title: 'Бронювання номерів' },
+        component: () => import('@/views/bookings/bookings.view.vue'),
+    },
+    {
+        path: '/services',
+        name: RouteName.Services,
+        meta: { title: 'Додаткові послуги' },
+        component: () => import('@/views/services/services.view.vue'),
+    },
+    {
+        path: '/calculation',
+        name: RouteName.Calculation,
+        meta: { title: 'Розрахунок вартості' },
+        component: () => import('@/views/calculation/calculation.view.vue'),
+    },
+    {
+        path: '/data-view',
+        name: RouteName.DataView,
+        meta: { title: 'Перегляд даних' },
+        component: () => import('@/views/data-view/data-view.view.vue'),
     },
 ]
 

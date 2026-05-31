@@ -13,7 +13,7 @@
 <script lang="ts" setup>
 import { RouteName } from '@/router'
 
-const routes = [{ name: RouteName.Work_3, label: 'Практикум 3' }]
+const routes: { name: RouteName; label: string }[] = []
 </script>
 
 <style lang="scss">
