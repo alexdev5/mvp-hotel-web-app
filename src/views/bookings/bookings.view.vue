@@ -12,30 +12,44 @@
 
                 <form @submit.prevent="onSubmit">
                     <div class="form-group">
-                        <label for="guestName">ПІБ клієнта *</label>
-                        <input
-                            v-model="form.guestName"
-                            type="text"
-                            id="guestName"
+                        <label for="guestSelect">Клієнт *</label>
+                        <select
+                            v-model="form.guestId"
+                            id="guestSelect"
                             required
-                            placeholder="Іванов Іван Іванович"
-                        />
+                            :disabled="!guests.length"
+                        >
+                            <option value="">
+                                {{
+                                    guests.length
+                                        ? 'Оберіть клієнта'
+                                        : 'Немає зареєстрованих клієнтів'
+                                }}
+                            </option>
+                            <option
+                                v-for="guest in guests"
+                                :key="guest.id"
+                                :value="guest.id"
+                            >
+                                {{ guest.fullName }} ({{ guest.phone }})
+                            </option>
+                        </select>
                         <p v-if="fieldError('guestName')" class="field-error">
                             {{ fieldError('guestName') }}
                         </p>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="guestPhone">Телефон клієнта *</label>
-                        <input
-                            v-model="form.guestPhone"
-                            type="tel"
-                            id="guestPhone"
-                            required
-                            placeholder="+380991234567"
-                        />
                         <p v-if="fieldError('guestPhone')" class="field-error">
                             {{ fieldError('guestPhone') }}
+                        </p>
+                        <p
+                            v-if="
+                                editingId &&
+                                form.guestId === '' &&
+                                editingBooking
+                            "
+                            class="field-error"
+                        >
+                            Попередній клієнт ({{ editingBooking.guestName }})
+                            відсутній у списку. Оберіть нового.
                         </p>
                     </div>
 
@@ -166,8 +180,10 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import {
     ApiError,
     bookingsApi,
+    guestsApi,
     type Booking,
     type BookingPayload,
+    type Guest,
     type RoomType,
 } from '@/api'
 import ListingBlock from '@/components/layout/listing-block.vue'
@@ -188,8 +204,7 @@ const roomTypeLabel = (t: RoomType) => roomTypeLabels[t] ?? t
 
 // ---------- State ----------
 interface BookingForm {
-    guestName: string
-    guestPhone: string
+    guestId: string
     roomType: '' | RoomType
     checkIn: string
     checkOut: string
@@ -198,8 +213,7 @@ interface BookingForm {
 
 function emptyForm(): BookingForm {
     return {
-        guestName: '',
-        guestPhone: '',
+        guestId: '',
         roomType: '',
         checkIn: '',
         checkOut: '',
@@ -208,6 +222,7 @@ function emptyForm(): BookingForm {
 }
 
 const bookings = ref<Booking[]>([])
+const guests = ref<Guest[]>([])
 const loading = ref(false)
 const removing = ref(false)
 const submitting = ref(false)
@@ -215,6 +230,10 @@ const error = ref<string | null>(null)
 const validation = ref<Record<string, string[]>>({})
 const editingId = ref<string | null>(null)
 const form = reactive<BookingForm>(emptyForm())
+
+const editingBooking = computed<Booking | null>(
+    () => bookings.value.find((b) => b.id === editingId.value) ?? null,
+)
 
 const fieldError = (name: string) => validation.value[name]?.[0]
 const inProgressTitle = computed(() => {
@@ -235,25 +254,36 @@ function toDateInput(value: string): string {
     return formatDate(value)
 }
 
-async function loadBookings() {
+async function loadAll() {
     loading.value = true
     error.value = null
     try {
-        bookings.value = await bookingsApi.list()
+        const [bookingsRes, guestsRes] = await Promise.all([
+            bookingsApi.list(),
+            guestsApi.list(),
+        ])
+        bookings.value = bookingsRes
+        guests.value = guestsRes
     } catch (e) {
         error.value =
-            e instanceof ApiError ? e.message : 'Не вдалось завантажити бронювання'
+            e instanceof ApiError ? e.message : 'Не вдалось завантажити дані'
     } finally {
         loading.value = false
     }
 }
 
 async function onSubmit() {
-    if (form.roomType === '' || form.guests === '') return
+    if (form.roomType === '' || form.guests === '' || form.guestId === '') return
+
+    const guest = guests.value.find((g) => g.id === form.guestId)
+    if (!guest) {
+        error.value = 'Оберіть клієнта зі списку'
+        return
+    }
 
     const payload: BookingPayload = {
-        guestName: form.guestName.trim(),
-        guestPhone: form.guestPhone.trim(),
+        guestName: guest.fullName,
+        guestPhone: guest.phone,
         roomType: form.roomType,
         checkIn: form.checkIn,
         checkOut: form.checkOut,
@@ -289,8 +319,13 @@ async function onSubmit() {
 
 function startEdit(booking: Booking) {
     editingId.value = booking.id
-    form.guestName = booking.guestName
-    form.guestPhone = booking.guestPhone
+    // Match the booking's stored name+phone against the existing guests list.
+    // If the original guest was deleted, leave the select empty — UI will warn.
+    const matched = guests.value.find(
+        (g) =>
+            g.fullName === booking.guestName && g.phone === booking.guestPhone,
+    )
+    form.guestId = matched?.id ?? ''
     form.roomType = booking.roomType
     form.checkIn = toDateInput(booking.checkIn)
     form.checkOut = toDateInput(booking.checkOut)
@@ -326,7 +361,7 @@ async function onDelete(booking: Booking) {
     }
 }
 
-onMounted(loadBookings)
+onMounted(loadAll)
 </script>
 
 <style lang="scss"></style>
