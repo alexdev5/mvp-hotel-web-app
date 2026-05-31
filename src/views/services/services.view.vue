@@ -12,30 +12,44 @@
 
                 <form @submit.prevent="onSubmit">
                     <div class="form-group">
-                        <label for="guestName">ПІБ клієнта *</label>
-                        <input
-                            v-model="form.guestName"
-                            type="text"
-                            id="guestName"
+                        <label for="serviceGuestSelect">Клієнт *</label>
+                        <select
+                            v-model="form.guestId"
+                            id="serviceGuestSelect"
                             required
-                            placeholder="Іванов Іван Іванович"
-                        />
+                            :disabled="!guests.length"
+                        >
+                            <option value="">
+                                {{
+                                    guests.length
+                                        ? 'Оберіть клієнта'
+                                        : 'Немає зареєстрованих клієнтів'
+                                }}
+                            </option>
+                            <option
+                                v-for="guest in guests"
+                                :key="guest.id"
+                                :value="guest.id"
+                            >
+                                {{ guest.fullName }} (Номер {{ guest.room }})
+                            </option>
+                        </select>
                         <p v-if="fieldError('guestName')" class="field-error">
                             {{ fieldError('guestName') }}
                         </p>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="guestRoom">Номер клієнта *</label>
-                        <input
-                            v-model="form.guestRoom"
-                            type="text"
-                            id="guestRoom"
-                            required
-                            placeholder="Наприклад: 101"
-                        />
                         <p v-if="fieldError('guestRoom')" class="field-error">
                             {{ fieldError('guestRoom') }}
+                        </p>
+                        <p
+                            v-if="
+                                editingId &&
+                                form.guestId === '' &&
+                                editingService
+                            "
+                            class="field-error"
+                        >
+                            Попередній клієнт ({{ editingService.guestName }})
+                            відсутній у списку. Оберіть нового.
                         </p>
                     </div>
 
@@ -155,7 +169,9 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import {
     ApiError,
+    guestsApi,
     servicesApi,
+    type Guest,
     type Service,
     type ServicePayload,
     type ServiceType,
@@ -182,8 +198,7 @@ const serviceLabel = (s: ServiceType) => serviceLabels[s] ?? s
 
 // ---------- State ----------
 interface ServiceForm {
-    guestName: string
-    guestRoom: string
+    guestId: string
     serviceType: '' | ServiceType
     quantity: number | ''
     date: string
@@ -191,8 +206,7 @@ interface ServiceForm {
 
 function emptyForm(): ServiceForm {
     return {
-        guestName: '',
-        guestRoom: '',
+        guestId: '',
         serviceType: '',
         quantity: 1,
         date: new Date().toISOString().slice(0, 10),
@@ -200,6 +214,7 @@ function emptyForm(): ServiceForm {
 }
 
 const services = ref<Service[]>([])
+const guests = ref<Guest[]>([])
 const loading = ref(false)
 const removing = ref(false)
 const submitting = ref(false)
@@ -207,6 +222,10 @@ const error = ref<string | null>(null)
 const validation = ref<Record<string, string[]>>({})
 const editingId = ref<string | null>(null)
 const form = reactive<ServiceForm>(emptyForm())
+
+const editingService = computed<Service | null>(
+    () => services.value.find((s) => s.id === editingId.value) ?? null,
+)
 
 const fieldError = (name: string) => validation.value[name]?.[0]
 const inProgressTitle = computed(() => {
@@ -227,25 +246,41 @@ function toDateInput(value: string): string {
     return formatDate(value)
 }
 
-async function loadServices() {
+async function loadAll() {
     loading.value = true
     error.value = null
     try {
-        services.value = await servicesApi.list()
+        const [servicesRes, guestsRes] = await Promise.all([
+            servicesApi.list(),
+            guestsApi.list(),
+        ])
+        services.value = servicesRes
+        guests.value = guestsRes
     } catch (e) {
         error.value =
-            e instanceof ApiError ? e.message : 'Не вдалось завантажити послуги'
+            e instanceof ApiError ? e.message : 'Не вдалось завантажити дані'
     } finally {
         loading.value = false
     }
 }
 
 async function onSubmit() {
-    if (form.serviceType === '' || form.quantity === '') return
+    if (
+        form.serviceType === '' ||
+        form.quantity === '' ||
+        form.guestId === ''
+    )
+        return
+
+    const guest = guests.value.find((g) => g.id === form.guestId)
+    if (!guest) {
+        error.value = 'Оберіть клієнта зі списку'
+        return
+    }
 
     const payload: ServicePayload = {
-        guestName: form.guestName.trim(),
-        guestRoom: form.guestRoom.trim(),
+        guestName: guest.fullName,
+        guestRoom: guest.room,
         serviceType: form.serviceType,
         quantity: Number(form.quantity),
         date: form.date,
@@ -280,8 +315,13 @@ async function onSubmit() {
 
 function startEdit(service: Service) {
     editingId.value = service.id
-    form.guestName = service.guestName
-    form.guestRoom = service.guestRoom
+    // Match the stored guestName + guestRoom against the existing guests list.
+    // If the original guest was deleted, leave the select empty — UI will warn.
+    const matched = guests.value.find(
+        (g) =>
+            g.fullName === service.guestName && g.room === service.guestRoom,
+    )
+    form.guestId = matched?.id ?? ''
     form.serviceType = service.serviceType
     form.quantity = service.quantity
     form.date = toDateInput(service.date)
@@ -317,7 +357,7 @@ async function onDelete(service: Service) {
     }
 }
 
-onMounted(loadServices)
+onMounted(loadAll)
 </script>
 
 <style lang="scss"></style>
