@@ -213,8 +213,7 @@ const inProgressTitle = computed(() => {
 
 function formatDate(value: string): string {
     if (!value) return ''
-    // Backend returns ISO with timestamp ("2026-05-31T00:00:00.000000Z").
-    // For display we only need the date part.
+
     return value.slice(0, 10)
 }
 

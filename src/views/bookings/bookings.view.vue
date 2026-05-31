@@ -6,62 +6,327 @@
         </div>
 
         <div class="content-wrapper">
+            <!-- ---------- Form ---------- -->
             <div class="form-section">
-                <h2>Створити бронювання</h2>
-                <form @submit.prevent>
+                <h2>{{ editingId ? 'Редагувати бронювання' : 'Створити бронювання' }}</h2>
+
+                <form @submit.prevent="onSubmit">
                     <div class="form-group">
-                        <label for="guestSelect">Клієнт *</label>
-                        <select id="guestSelect" required>
-                            <option value="">Оберіть клієнта</option>
-                        </select>
+                        <label for="guestName">ПІБ клієнта *</label>
+                        <input
+                            v-model="form.guestName"
+                            type="text"
+                            id="guestName"
+                            required
+                            placeholder="Іванов Іван Іванович"
+                        />
+                        <p v-if="fieldError('guestName')" class="field-error">
+                            {{ fieldError('guestName') }}
+                        </p>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="guestPhone">Телефон клієнта *</label>
+                        <input
+                            v-model="form.guestPhone"
+                            type="tel"
+                            id="guestPhone"
+                            required
+                            placeholder="+380991234567"
+                        />
+                        <p v-if="fieldError('guestPhone')" class="field-error">
+                            {{ fieldError('guestPhone') }}
+                        </p>
                     </div>
 
                     <div class="form-group">
                         <label for="roomTypeSelect">Тип номера *</label>
-                        <select id="roomTypeSelect" required>
+                        <select v-model="form.roomType" id="roomTypeSelect" required>
                             <option value="">Оберіть тип</option>
-                            <option value="standard">Стандарт</option>
-                            <option value="comfort">Комфорт</option>
-                            <option value="lux">Люкс</option>
-                            <option value="president">Президентський</option>
+                            <option
+                                v-for="type in roomTypes"
+                                :key="type.value"
+                                :value="type.value"
+                            >
+                                {{ type.label }}
+                            </option>
                         </select>
+                        <p v-if="fieldError('roomType')" class="field-error">
+                            {{ fieldError('roomType') }}
+                        </p>
                     </div>
 
                     <div class="form-group">
                         <label for="bookingCheckIn">Дата заїзду *</label>
-                        <input type="date" id="bookingCheckIn" required />
+                        <input
+                            v-model="form.checkIn"
+                            type="date"
+                            id="bookingCheckIn"
+                            required
+                        />
+                        <p v-if="fieldError('checkIn')" class="field-error">
+                            {{ fieldError('checkIn') }}
+                        </p>
                     </div>
 
                     <div class="form-group">
                         <label for="bookingCheckOut">Дата виїзду *</label>
-                        <input type="date" id="bookingCheckOut" required />
+                        <input
+                            v-model="form.checkOut"
+                            type="date"
+                            id="bookingCheckOut"
+                            required
+                        />
+                        <p v-if="fieldError('checkOut')" class="field-error">
+                            {{ fieldError('checkOut') }}
+                        </p>
                     </div>
 
                     <div class="form-group">
-                        <label for="guests">Кількість гостей *</label>
+                        <label for="guestsCount">Кількість гостей *</label>
                         <input
+                            v-model.number="form.guests"
                             type="number"
-                            id="guests"
+                            id="guestsCount"
                             required
                             min="1"
-                            value="1"
                         />
+                        <p v-if="fieldError('guests')" class="field-error">
+                            {{ fieldError('guests') }}
+                        </p>
                     </div>
 
-                    <div class="availability-message"></div>
+                    <p v-if="error" class="field-error">{{ error }}</p>
 
-                    <button type="submit" class="btn-primary">Забронювати</button>
+                    <button type="submit" class="btn-primary" :disabled="submitting">
+                        {{
+                            submitting
+                                ? 'Зачекайте…'
+                                : editingId
+                                    ? 'Зберегти зміни'
+                                    : 'Забронювати'
+                        }}
+                    </button>
+
+                    <button
+                        v-if="editingId"
+                        type="button"
+                        class="btn-cancel"
+                        @click="cancelEdit"
+                    >
+                        Скасувати редагування
+                    </button>
                 </form>
             </div>
 
-            <div class="list-section">
-                <h2>Активні бронювання</h2>
-                <div class="bookings-list"></div>
-            </div>
+            <ListingBlock
+                title="Активні бронювання"
+                :loadingTitle="inProgressTitle"
+                :records="bookings"
+            >
+                <div
+                    v-for="booking in bookings"
+                    :key="booking.id"
+                    class="list-item"
+                >
+                    <h4>{{ booking.guestName }}</h4>
+                    <p><strong>Телефон:</strong> {{ booking.guestPhone }}</p>
+                    <p>
+                        <strong>Тип номера:</strong>
+                        {{ roomTypeLabel(booking.roomType) }}
+                    </p>
+                    <p><strong>Заїзд:</strong> {{ formatDate(booking.checkIn) }}</p>
+                    <p><strong>Виїзд:</strong> {{ formatDate(booking.checkOut) }}</p>
+                    <p><strong>Кількість гостей:</strong> {{ booking.guests }}</p>
+                    <p><strong>Статус:</strong> {{ booking.status }}</p>
+                    <div class="item-actions">
+                        <button
+                            type="button"
+                            class="btn-edit"
+                            @click="startEdit(booking)"
+                        >
+                            Редагувати
+                        </button>
+                        <button
+                            type="button"
+                            class="btn-delete"
+                            @click="onDelete(booking)"
+                        >
+                            Скасувати
+                        </button>
+                    </div>
+                </div>
+            </ListingBlock>
         </div>
     </div>
 </template>
 
-<script lang="ts" setup></script>
+<script lang="ts" setup>
+import { computed, onMounted, reactive, ref } from 'vue'
+import {
+    ApiError,
+    bookingsApi,
+    type Booking,
+    type BookingPayload,
+    type RoomType,
+} from '@/api'
+import ListingBlock from '@/components/layout/listing-block.vue'
+
+// ---------- Reference data ----------
+const roomTypes: { value: RoomType; label: string }[] = [
+    { value: 'standard', label: 'Стандарт' },
+    { value: 'comfort', label: 'Комфорт' },
+    { value: 'lux', label: 'Люкс' },
+    { value: 'president', label: 'Президентський' },
+]
+
+const roomTypeLabels: Record<RoomType, string> = Object.fromEntries(
+    roomTypes.map((t) => [t.value, t.label]),
+) as Record<RoomType, string>
+
+const roomTypeLabel = (t: RoomType) => roomTypeLabels[t] ?? t
+
+// ---------- State ----------
+interface BookingForm {
+    guestName: string
+    guestPhone: string
+    roomType: '' | RoomType
+    checkIn: string
+    checkOut: string
+    guests: number | ''
+}
+
+function emptyForm(): BookingForm {
+    return {
+        guestName: '',
+        guestPhone: '',
+        roomType: '',
+        checkIn: '',
+        checkOut: '',
+        guests: 1,
+    }
+}
+
+const bookings = ref<Booking[]>([])
+const loading = ref(false)
+const removing = ref(false)
+const submitting = ref(false)
+const error = ref<string | null>(null)
+const validation = ref<Record<string, string[]>>({})
+const editingId = ref<string | null>(null)
+const form = reactive<BookingForm>(emptyForm())
+
+const fieldError = (name: string) => validation.value[name]?.[0]
+const inProgressTitle = computed(() => {
+    if (loading.value) {
+        return 'Завантаження...'
+    } else if (removing.value) {
+        return 'Видалення...'
+    }
+    return ''
+})
+
+function formatDate(value: string): string {
+    if (!value) return ''
+    return value.slice(0, 10)
+}
+
+function toDateInput(value: string): string {
+    return formatDate(value)
+}
+
+async function loadBookings() {
+    loading.value = true
+    error.value = null
+    try {
+        bookings.value = await bookingsApi.list()
+    } catch (e) {
+        error.value =
+            e instanceof ApiError ? e.message : 'Не вдалось завантажити бронювання'
+    } finally {
+        loading.value = false
+    }
+}
+
+async function onSubmit() {
+    if (form.roomType === '' || form.guests === '') return
+
+    const payload: BookingPayload = {
+        guestName: form.guestName.trim(),
+        guestPhone: form.guestPhone.trim(),
+        roomType: form.roomType,
+        checkIn: form.checkIn,
+        checkOut: form.checkOut,
+        guests: Number(form.guests),
+    }
+
+    submitting.value = true
+    error.value = null
+    validation.value = {}
+
+    try {
+        if (editingId.value) {
+            const updated = await bookingsApi.update(editingId.value, payload)
+            const idx = bookings.value.findIndex((b) => b.id === editingId.value)
+            if (idx !== -1) bookings.value.splice(idx, 1, updated)
+            cancelEdit()
+        } else {
+            const created = await bookingsApi.create(payload)
+            bookings.value.push(created)
+            resetForm()
+        }
+    } catch (e) {
+        if (e instanceof ApiError) {
+            error.value = e.message
+            validation.value = e.validation ?? {}
+        } else {
+            error.value = 'Не вдалось зберегти бронювання'
+        }
+    } finally {
+        submitting.value = false
+    }
+}
+
+function startEdit(booking: Booking) {
+    editingId.value = booking.id
+    form.guestName = booking.guestName
+    form.guestPhone = booking.guestPhone
+    form.roomType = booking.roomType
+    form.checkIn = toDateInput(booking.checkIn)
+    form.checkOut = toDateInput(booking.checkOut)
+    form.guests = booking.guests
+    error.value = null
+    validation.value = {}
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+function cancelEdit() {
+    editingId.value = null
+    resetForm()
+}
+
+function resetForm() {
+    Object.assign(form, emptyForm())
+    validation.value = {}
+}
+
+async function onDelete(booking: Booking) {
+    if (!confirm(`Скасувати бронювання "${booking.guestName}"?`)) return
+    removing.value = true
+
+    try {
+        await bookingsApi.remove(booking.id)
+        bookings.value = bookings.value.filter((b) => b.id !== booking.id)
+        if (editingId.value === booking.id) cancelEdit()
+    } catch (e) {
+        error.value =
+            e instanceof ApiError ? e.message : 'Не вдалось видалити бронювання'
+    } finally {
+        removing.value = false
+    }
+}
+
+onMounted(loadBookings)
+</script>
 
 <style lang="scss"></style>
