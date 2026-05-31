@@ -1,0 +1,87 @@
+@use "@/styles/utils/media" as *;
+
+.app-page-content-wrapper {
+  display: flex;
+  flex-grow: 1;
+  gap: 16px;
+  flex-direction: column;
+
+  @include mobile {
+    flex-direction: row;
+  }
+}
+
+aside {
+  min-height: 100%;
+  background-color: var(--app-color-n-96);
+  padding: 16px;
+  position: relative;
+  box-shadow: 0px 1px 2px 0px rgba(0, 0, 0, 0.3),
+  0px 2px 6px 2px rgba(0, 0, 0, 0.15);
+
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  @include mobile {
+    width: 285px;
+  }
+}
+
+.app-page-content {
+  flex: 1;
+  padding: 16px;
+  overflow-x: hidden;
+
+  @include mobile {
+    padding: 24px 16px 24px 0;
+  }
+}
+
+// aside
+.aside-navigation {
+  display: grid;
+  gap: 12px;
+
+  .aside-navigation-children {
+    margin-left: 32px;
+    display: grid;
+    gap: 8px;
+    padding-block-start: 8px;
+  }
+}
+
+.aside-navigation-item {
+  button {
+    text-align: left;
+    width: 100%;
+    padding-inline-start: 20px;
+  }
+}
+
+.aside-navigation-item.active {
+  > button {
+    background-color: var(--app-color-p-90);
+    position: relative;
+
+    &:before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--app-color-p-40);
+      position: absolute;
+      top: 50%;
+      left: 8px;
+      transform: translateY(-50%);
+    }
+  }
+
+  .aside-navigation-children {
+    .active > button {
+      background-color: var(--app-color-p-95);
+    }
+  }
+}
