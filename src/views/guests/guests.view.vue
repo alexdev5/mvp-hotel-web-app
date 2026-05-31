@@ -67,16 +67,42 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="room">Номер для поселення *</label>
-                        <input
+                        <label for="roomSelect">Номер для поселення *</label>
+                        <select
                             v-model="form.room"
-                            type="text"
-                            id="room"
+                            id="roomSelect"
                             required
-                            placeholder="Наприклад: 101"
-                        />
+                            :disabled="!rooms.length"
+                        >
+                            <option value="">
+                                {{
+                                    rooms.length
+                                        ? 'Оберіть номер'
+                                        : 'Немає створених номерів'
+                                }}
+                            </option>
+                            <option
+                                v-for="room in rooms"
+                                :key="room.id"
+                                :value="room.number"
+                            >
+                                Номер {{ room.number }} — {{ roomTypeLabel(room.type) }},
+                                {{ room.price }} грн/доба ({{ roomStatusLabel(room.status) }})
+                            </option>
+                        </select>
                         <p v-if="fieldError('room')" class="field-error">
                             {{ fieldError('room') }}
+                        </p>
+                        <p
+                            v-if="
+                                editingId &&
+                                form.room === '' &&
+                                editingGuest
+                            "
+                            class="field-error"
+                        >
+                            Попередній номер ({{ editingGuest.room }}) відсутній
+                            у списку. Оберіть новий.
                         </p>
                     </div>
 
@@ -166,8 +192,34 @@
 
 <script lang="ts" setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ApiError, type Guest, type GuestPayload, guestsApi } from '@/api'
+import {
+    ApiError,
+    guestsApi,
+    roomsApi,
+    type Guest,
+    type GuestPayload,
+    type Room,
+    type RoomStatus,
+    type RoomType,
+} from '@/api'
 import ListingBlock from '@/components/layout/listing-block.vue'
+
+// ---------- Labels ----------
+const roomTypeLabels: Record<RoomType, string> = {
+    standard: 'Стандарт',
+    comfort: 'Комфорт',
+    lux: 'Люкс',
+    president: 'Президентський',
+}
+
+const roomStatusLabels: Record<RoomStatus, string> = {
+    available: 'Вільний',
+    occupied: 'Зайнятий',
+    cleaning: 'На прибиранні',
+}
+
+const roomTypeLabel = (t: RoomType) => roomTypeLabels[t] ?? t
+const roomStatusLabel = (s: RoomStatus) => roomStatusLabels[s] ?? s
 
 // ---------- State ----------
 interface GuestForm {
@@ -193,6 +245,7 @@ function emptyForm(): GuestForm {
 }
 
 const guests = ref<Guest[]>([])
+const rooms = ref<Room[]>([])
 const loading = ref(false)
 const removing = ref(false)
 const submitting = ref(false)
@@ -200,6 +253,10 @@ const error = ref<string | null>(null)
 const validation = ref<Record<string, string[]>>({})
 const editingId = ref<string | null>(null)
 const form = reactive<GuestForm>(emptyForm())
+
+const editingGuest = computed<Guest | null>(
+    () => guests.value.find((g) => g.id === editingId.value) ?? null,
+)
 
 const fieldError = (name: string) => validation.value[name]?.[0]
 const inProgressTitle = computed(() => {
@@ -222,25 +279,32 @@ function toDateInput(value: string): string {
     return formatDate(value)
 }
 
-async function loadGuests() {
+async function loadAll() {
     loading.value = true
     error.value = null
     try {
-        guests.value = await guestsApi.list()
+        const [guestsRes, roomsRes] = await Promise.all([
+            guestsApi.list(),
+            roomsApi.list(),
+        ])
+        guests.value = guestsRes
+        rooms.value = roomsRes
     } catch (e) {
         error.value =
-            e instanceof ApiError ? e.message : 'Не вдалось завантажити відвідувачів'
+            e instanceof ApiError ? e.message : 'Не вдалось завантажити дані'
     } finally {
         loading.value = false
     }
 }
 
 async function onSubmit() {
+    if (form.room === '') return
+
     const payload: GuestPayload = {
         fullName: form.fullName.trim(),
         passport: form.passport.trim(),
         phone: form.phone.trim(),
-        room: form.room.trim(),
+        room: form.room,
         checkIn: form.checkIn,
         checkOut: form.checkOut,
     }
@@ -280,7 +344,9 @@ function startEdit(guest: Guest) {
     form.passport = guest.passport
     form.phone = guest.phone
     form.email = guest.email ?? ''
-    form.room = guest.room
+    // If the previously assigned room was deleted from the system, leave empty —
+    // the UI will warn that the old room is missing and force re-selection.
+    form.room = rooms.value.some((r) => r.number === guest.room) ? guest.room : ''
     form.checkIn = toDateInput(guest.checkIn)
     form.checkOut = toDateInput(guest.checkOut)
     error.value = null
@@ -314,7 +380,7 @@ async function onDelete(guest: Guest) {
     }
 }
 
-onMounted(loadGuests)
+onMounted(loadAll)
 </script>
 
 <style lang="scss"></style>
